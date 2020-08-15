@@ -1,48 +1,64 @@
-import tkinter as Tkinter
+from tkinter import *
+import PIL
 from PIL import Image, ImageTk, ImageDraw
 import numpy as np
 import sys
+import cv2
+import matplotlib.pyplot as plt
+
 
 def img_crop(path, basewidth = 500):
-    pp = polygon_select(path, basewidth)
+    pp = polygon_select(path)
     newIm = polygon_crop(path, pp)
     return newIm
 
+
 def polygon_select(path, basewidth = 500):
-    window = Tkinter.Tk(className="bla")
-    clickList = list()
+    cs = list()
+    img = cv2.imread(path)
+    length, wid, _ = img.shape
 
-    image = Image.open(path)
-    wid_ratio = basewidth/image.size[0]
-    baselength = int(round(image.size[1] * wid_ratio))
-    image = image.resize((basewidth, baselength), Image.ANTIALIAS)
+    wid_ratio = basewidth/wid
+    baselength = int(round(length * wid_ratio))
+    # img = img.resize((basewidth, baselength), Image.ANTIALIAS)
+    img = cv2.resize(img, dsize=(basewidth, baselength), interpolation=cv2.INTER_CUBIC)
 
-    canvas = Tkinter.Canvas(window, width=image.size[0], height=image.size[1])
-    canvas.pack()
-    image_tk = ImageTk.PhotoImage(image)
+    # mouse callback function
+    def draw_circle(event,x,y,flags,param):
 
-    canvas.create_image(image.size[0]//2, image.size[1]//2, image=image_tk)
+        if event == cv2.EVENT_LBUTTONDOWN:
+            cv2.circle(img,(x,y),5,(0,0,255),-1)
+            cs.append((int(round(x/wid_ratio)), int(round(y/wid_ratio))))
+            print("click on x: " + str(x) + " y: " + str(y))
 
-    def callback(event):
-        print ("clicked at: "+ str(event.x), str(event.y))
-        clickList.append((int(round(event.x/wid_ratio)), int(round(event.y/wid_ratio))))
 
-    canvas.bind("<Button-1>", callback)
-    Tkinter.mainloop()
-    return clickList
+    cv2.namedWindow('image')
+    cv2.setMouseCallback('image',draw_circle)
 
+    while(1):
+        cv2.imshow('image',img)
+        k = cv2.waitKey(1) & 0xFF
+        if k == 27:
+            break
+
+    cv2.destroyAllWindows()
+    return cs
 
 def polygon_crop(path, polygon):
-    im = Image.open(path).convert("RGBA")
-    imArray = np.asarray(im)
+    img = Image.open(path).convert("RGB")
+    img_array = np.asarray(img)
 
-    maskIm = Image.new('L', (imArray.shape[1], imArray.shape[0]), 0)
-    ImageDraw.Draw(maskIm).polygon(polygon, outline=1, fill=1)
-    mask = np.array(maskIm)
+    mask_img = Image.new('1', (img_array.shape[1], img_array.shape[0]), 0)
+    ImageDraw.Draw(mask_img).polygon(polygon, outline=1, fill=1)
+    mask = np.array(mask_img)
 
-    newImArray = np.empty(imArray.shape,dtype='uint8')
-    newImArray[:,:,:3] = imArray[:,:,:3]
-    newImArray[:,:,3] = mask*255
+    new_img_array = np.empty(img_array.shape, dtype='uint8')
+    new_img_array[:,:,:3] = img_array[:,:,:3]
 
-    newIm = Image.fromarray(newImArray, "RGBA")
+    new_img_array[:,:,0] = new_img_array[:,:,0] * mask
+    new_img_array[:,:,1] = new_img_array[:,:,1] * mask
+    new_img_array[:,:,2] = new_img_array[:,:,2] * mask
+
+    # back to Image from numpy
+    newIm = Image.fromarray(new_img_array, "RGB")
     return newIm
